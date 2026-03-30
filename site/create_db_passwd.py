@@ -12,10 +12,9 @@ db = conn.cursor()
 # ---- Table utilisateurs ----
 db.execute("""
 CREATE TABLE IF NOT EXISTS utilisateurs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT PRIMARY KEY,   
     nom TEXT NOT NULL,
     prenom TEXT NOT NULL,
-    username TEXT UNIQUE NOT NULL,   -- identifiant pour login
     password TEXT NOT NULL,          -- mot de passe haché
     etat INTEGER CHECK (etat IN (0,1)) DEFAULT 0
 )
@@ -39,7 +38,7 @@ CREATE TABLE IF NOT EXISTS passages (
     user_id INTEGER,
     date_entree TEXT,
     date_sortie TEXT,
-    FOREIGN KEY(user_id) REFERENCES utilisateurs(id)
+    FOREIGN KEY(user_id) REFERENCES utilisateurs(username)
 )
 """)
 
@@ -47,15 +46,15 @@ print("La base de données a été créée avec succès.")
 
 # ---- Ajout d'utilisateurs exemples ----
 users = [
-    ('Ravalison', 'Audrey', 'RA0000', hash_password('0272'), 0),
-    ('Lawson', 'Clara', 'LA0000', hash_password('8638'), 0),
-    ('Fofana', 'Oumou', 'FO0000', hash_password('8776'), 0),
-    ('Ngassam', 'Paule', 'NP0000', hash_password('2753'), 0),
-    ('Nsenda', 'Jeremie', 'NJ0000', hash_password('2525'), 0)
+    ( 'RA0000','Ravalison', 'Audrey', hash_password('0272'), 0),
+    ( 'LA0000','Lawson', 'Clara', hash_password('8638'), 0),
+    ( 'FO0000','Fofana', 'Oumou', hash_password('8776'), 0),
+    ( 'NP0000','Ngassam', 'Paule', hash_password('2753'), 0),
+    ( 'NJ0000','Nsenda', 'Jeremie', hash_password('2525'), 0)
 ]
 
 db.executemany("""
-INSERT INTO utilisateurs (nom, prenom, username, password, etat)
+INSERT INTO utilisateurs ( username, nom, prenom, password, etat)
 VALUES (?, ?, ?, ?, ?)
 """, users)
 

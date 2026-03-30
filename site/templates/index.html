@@ -1,68 +1,75 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
-    <title>Accueil</title>
-</head>
+<!doctype html>
+<html lang="fr">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+        <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+        <title>Accueil</title>
+    </head>
 
-<body onload="init();">
-    <header>
-        <h1>PAJCO</h1>
-        
-    </header>
+    <body onload="init()">
+        <header>
+            <h1>PAJCO</h1>
+            <ul>
+                <li><a href="admin">Admin</a></li>
+            </ul>
+        </header>
 
-    <main>
-        <section>
-            <h2>Bienvenue sur PAJCO !</h2>
+        <main>
+            <section>
+                <h2>Bienvenue sur PAJCO !</h2>
+                <p>
+                    PAJCO est un parking privé en ligne qui est accessible à tous les
+                    utilisateurs. Vous pouvez accéder à notre parking en ligne grace à
+                    notre interface web.
+                </p>
+
+                <p>
+                    Pour accéder à notre parking, vous devez d'abord introduire vos
+                    informations de connexion sur notre site web. Une fois votre mot de
+                    passe et username entré, si correct, la bariere sera ouverte quand le
+                    capteur de présence détectera votre présence et vous pourrez accéder à
+                    notre parking.
+                </p>
+                <p>
+                    Notre système de parking en ligne est conçu pour être simple et facile
+                    à utiliser. Il utilise un capteur de présence pour détecter les
+                    véhicules qui approchent de la barrière d'entrée. Lorsque le capteur de présence en détecte un véhicule, il envoie une notification à notre serveur, qui
+                    vérifie si le véhicule est autorisé à entrer. Si le véhicule est
+                    autorisé, la barrière s'ouvre automatiquement, permettant au
+                    conducteur d'accéder au parking.
+                </p>
+            </section>
+
+            <section>
+                <form id="openDoorForm" onsubmit="return false;">
+                    <fieldset>
+                        <legend>Ouverture de la barrière</legend>
+
+                        <label for="username">Nom d'utilisateur:</label>
+                        <input type="text" id="username" name="username" required />
+                        <br />
+                        <label for="password">Mot de passe:</label>
+                        <input type="password" id="password" name="password" required />
+                        <br />
+                        <button type="button" onclick="OpenDoor()"> Ouvrir la barrière </button>
+                    </fieldset>
+                </form>
+            </section>
+
+            <dialog id="dialog">
+                <p id="dialogMessage"><!-- Message de connexion --></p>
+                <button onclick="fermerPopup('dialog')">Fermer</button>
+            </dialog>
+        </main>
+
+        <footer>
             <p>
-                PAJCO est un parking privé en ligne qui est accessible à tous les utilisateurs. 
-                Vous pouvez accéder à notre parking en ligne grace à notre interface web.
-            </p>  
-
-            <p>
-                Pour accéder à notre parking, vous devez d'abord introduire vos informations de 
-                connexion sur notre site web. 
-                Une fois votre mot de passe et username entré, si correct,
-                la bariere sera ouverte quand le capteur de presence détectera votre présence 
-                et vous pourrez accéder à notre parking.
-                 
+                Ceci est le projet PAJCO du groupe 5 dans le cadre du projet dans le
+                cours d'electronique digitale.
             </p>
-            <p>
-                Notre système de parking en ligne est conçu pour être simple et facile à utiliser. 
-                Il utilise un capteur de présence pour détecter les véhicules qui approchent de la barrière d'entrée. 
-                Lorsque le capteur détecte un véhicule, il envoie une notification à notre serveur, qui vérifie si le véhicule est autorisé à entrer. 
-                Si le véhicule est autorisé, la barrière s'ouvre automatiquement, permettant au conducteur d'accéder au parking.
-            </p>
-        </section>
-         
-        <section>
-            <form id="loginForm">
-                <fieldset>
-                    <legend>Connexion</legend>
-                    <label for="username">Nom d'utilisateur:</label>
-                    <input type="text" id="username" name="username" required>
-                    <label for="password">Mot de passe:</label>
-                    <input type="password" id="password" name="password" required>
-                    <button type="button" onclick="OpenDoor();">Ouvrir la barrière</button>
-                </fieldset>
-            </form>
-
-        </section>
-
-        <dialog id="dialog">
-            <p id="dialogMessage"> <!-- Message de connexion --> </p>
-            <button onclick="fermerPopup('dialog');"> Fermer </button>
-        </dialog>
-    </main>
-
-    <footer>
-        <p>
-            Ceci est le projet PAJCO du groupe 5 dans le cadre du projet dans le cours d'electronique digitale.
-        </p>
-        <p>PAJCO - Parking Access Just Controle Online</p>
-    </footer>
-</body>
+            <p>PAJCO - Parking Access Just Controle Online</p>
+        </footer>
+    </body>
 </html>

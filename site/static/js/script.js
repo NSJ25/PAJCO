@@ -35,8 +35,8 @@ function OpenDoor() {
         if (xhr.status === 200) {
             let response = JSON.parse(xhr.responseText);
             let msg = getId("dialogMessage");
-            if (response.status === "ACCESS_GRANTED") {
-                msg.innerHTML = "Barrière ouverte !";
+            if (response.status === "access authorisé") {
+                msg.innerHTML = `Bienvenue a la maison : ${response.prenom} ${response.nom} !`;
             } else {
                 msg.innerHTML = "Nom d'utilisateur ou mot de passe incorrect.";
             }

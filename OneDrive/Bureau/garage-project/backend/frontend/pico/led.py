@@ -1,0 +1,2 @@
+bonjour = "toto"
+print(bonjour)

@@ -1,9 +1,17 @@
 from flask import Flask, render_template, request, jsonify
+import paho.mqtt.publish as publish
 import sqlite3
 import hashlib
 
-
 app = Flask(__name__)
+
+# Fonction pour envoyer un message MQTT
+def send_mqtt(topic, message):
+    publish.single(
+        topic,
+        message,
+        hostname="broker.hivemq.com"  # IP du broker MQTT
+    )
 
 # Fonction pour hacher le mot de passe
 def hash_password(password):
@@ -14,6 +22,37 @@ def connect_db():
     connect = sqlite3.connect("parking.db")
     connect.row_factory = sqlite3.Row
     return connect
+
+# Fonction pour mettre à jour le statut du parking
+def update_parking_status():
+
+    connect = connect_db()
+    db = connect.cursor()
+
+    db.execute("SELECT COUNT(*) as count FROM utilisateurs WHERE etat = 1")
+    result = db.fetchone()
+
+    used = result["count"]
+    free = 20 - used
+
+    connect.close()
+
+    # Envoyer au Pico
+    send_mqtt("PAJCO/parking/free", str(free))
+
+    return used, free
+
+# Fonction pour mettre à jour l'état des leds
+def parking_led_status(used):
+
+    if used <= 12:
+        send_mqtt("PAJCO/led", "green")
+
+    elif used < 20:
+        send_mqtt("PAJCO/led", "orange")
+
+    else:
+        send_mqtt("PAJCO/led", "red")
 
 # Route pour acceder a page d'accueil
 @app.route("/")
@@ -28,37 +67,120 @@ def admin():
 # Route pour ouvrir la porte
 @app.route("/openDoor", methods=["POST"])
 def open_door():
-    # Récupérer les données du formulaire
+
     username = request.form["username"]
-    password = request.form["password"]
-    
-    # Hacher le mot de passe
-    password = hash_password(password)
-    
-    # Se connecter à la base de données
+    password = hash_password(request.form["password"])
+
     connect = connect_db()
     db = connect.cursor()
-    
-    # Rechercher l'utilisateur dans la base de données
-    db.execute(
-        "SELECT nom, prenom, username FROM utilisateurs WHERE username=? AND password=?",
-        (username, password)
-    )
+
+    # Vérifier login
+    db.execute("""
+        SELECT nom, prenom, username, etat
+        FROM utilisateurs
+        WHERE username=? AND password=?
+    """, (username, password))
+
     user = db.fetchone()
+
+    # Utilisateur inconnu
+    if not user:
+        connect.close()
+        return jsonify({
+            "status": "refusé",
+            "reason": "identifiants incorrects"
+        })
+
+    # Vérifier état
+    if user["etat"] == 1:
+        connect.close()
+        return jsonify({
+            "status": "refusé",
+            "reason": "déjà dans le parking"
+        })
+
+    # Autorisé à entrer
+    db.execute("""
+        UPDATE utilisateurs
+        SET etat = 1
+        WHERE username=?
+    """, (username,))
+
+    connect.commit()
     connect.close()
 
-    # Vérifier si l'utilisateur existe
-    if user:
-        # ID et mot de passe corrects
-         return jsonify({
-            "status": "access authorisé",
-            "nom": user["nom"],
-            "prenom": user["prenom"]
+    # Mettre à jour le statut du parking
+    used, free = update_parking_status()
+    # Mettre à jour l'état des leds
+    parking_led_status(used)  
+
+    # MQTT → ouverture porte
+    send_mqtt("PAJCO/door", "open")
+
+    return jsonify({
+        "status": "autorisé",
+        "message": "entrée acceptée"
+    })
+      
+
+# Route pour fermer la porte
+@app.route("/closeDoor", methods=["POST"])
+def close_door():
+
+    username = request.form["username"]
+    password = hash_password(request.form["password"])
+
+    connect = connect_db()
+    db = connect.cursor()
+
+    # Vérifier utilisateur
+    db.execute("""
+        SELECT nom, prenom, username, etat
+        FROM utilisateurs
+        WHERE username=? AND password=?
+    """, (username, password))
+
+    user = db.fetchone()
+
+    # Utilisateur inexistant
+    if not user:
+        connect.close()
+        return jsonify({
+            "status": "refusé",
+            "reason": "identifiants incorrects"
         })
-    else:
-        # ID inexistant ou mot de passe incorrect
-        return jsonify({"status": "access refusé"})
+
+    # Pas dans le parking
+    if user["etat"] == 0:
+        connect.close()
+        return jsonify({
+            "status": "refusé",
+            "reason": "utilisateur pas dans le parking"
+        })
+
+    # Mise à jour état (sortie du parking)
+    db.execute("""
+        UPDATE utilisateurs
+        SET etat = 0
+        WHERE username=?
+    """, (username,))
+
+    connect.commit()
+    connect.close()
+
+    # Mettre à jour le statut du parking
+    used, free = update_parking_status()
+    # Mettre à jour l'état des leds
+    parking_led_status(used)  
     
+    # MQTT → fermer barrière
+    send_mqtt("PAJCO/door", "close")
+
+    return jsonify({
+        "status": "autorisé",
+        "message": "sortie enregistrée"
+    })
+       
 # Route pour charger les utilisateurs
 @app.route("/users", methods=["GET"])
 def load_users():
@@ -79,8 +201,8 @@ def load_users():
             "etat": user["etat"]
         })
     return jsonify(users_list)
-
-# Route pour ajouter un utilisateur
+    
+# Route pour ajouter un utilisateur   
 @app.route("/addUser", methods=["POST"])
 def add_user():
     # Récupérer les données du formulaire
@@ -104,7 +226,8 @@ def add_user():
     connect.commit()
     connect.close()
     return jsonify({"status": "utilisateur ajouté avec succès"})
-    
+
+# Route pour supprimer un utilisateur
 @app.route("/removeUser", methods=["POST"])
 def remove_user():
     username = request.form["username"]
@@ -129,7 +252,11 @@ def remove_user():
     else:
         return jsonify({"status": "utilisateur inexistant ou mot de passe incorrect"}) 
     
-    
+
+
+
+
+  
     
 
 if __name__ == "__main__":

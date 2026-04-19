@@ -1,90 +1,100 @@
 from machine import Pin
+import _thread
+import time
+
 
 class CD4511:
     """
-    Gestion de deux afficheurs 7 segments cathode commune
-    via CD4511 + 2 transistors NPN (multiplexage).
+    Double afficheur 7 segments (0-99)
+    avec CD4511 + 2 transistors (multiplexage)
+
+    - 4 pins BCD (A, B, C, D)
+    - 2 pins transistors (unités / dizaines)
+    - affichage automatique via thread
     """
 
-    def __init__(self, bcd_pins, transistor_pins, le_pin, bi_pin, lt_pin):
+   
+    def __init__(self, bcd_pins, transistor_pins):
+
+        # -------- Validation --------
+        if len(bcd_pins) != 4:
+            raise ValueError("Il faut exactement 4 pins BCD (A, B, C, D)")
+
+        if len(transistor_pins) != 2:
+            raise ValueError("Il faut exactement 2 pins pour les transistors")
+
+        # -------- Hardware BCD --------
+        self.bcd = [Pin(p, Pin.OUT) for p in bcd_pins]
+
+        # -------- Transistors --------
+        self.digits = [Pin(p, Pin.OUT) for p in transistor_pins]
+
+        # Éteindre les digits au départ
+        for d in self.digits:
+            d.value(0)
+
+       
+        self.value = 0          # nombre affiché (0-99)
+        self.active = 0         # digit actif (0 ou 1)
+        self.running = True     # contrôle thread
+
+       
+        _thread.start_new_thread(self._loop, ())
+
+   
+    def _write_bcd(self, number):
+        """Envoie un chiffre (0-9) vers le CD4511"""
+        for i in range(4):
+            self.bcd[i].value((number >> i) & 1)
+
+    
+    def show(self, number):
         """
-        bcd_pins : [A, B, C, D]
-        transistor_pins : [unites, dizaines]
-        le_pin : Latch Enable
-        bi_pin : Blanking Input
-        lt_pin : Lamp Test
+        Définit le nombre à afficher (0-99)
         """
+        if number < 0:
+            number = 0
+        elif number > 99:
+            number = 99
 
-        # BCD
-        self.bcd_pins = [Pin(pin, Pin.OUT) for pin in bcd_pins]
-
-        # Transistors (digit select)
-        self.transistors = [Pin(pin, Pin.OUT) for pin in transistor_pins]
-        for t in self.transistors:
-            t.value(0)
-
-        # Pins de contrôle CD4511
-        self.le = Pin(le_pin, Pin.OUT)
-        self.bi = Pin(bi_pin, Pin.OUT)
-        self.lt = Pin(lt_pin, Pin.OUT)
-
-        # Configuration normale
-        self.le.value(0)  # Pas de latch
-        self.bi.value(1)  # Pas de blank
-        self.lt.value(1)  # Pas de lamp test
-
-        self.value = 0
-        self.current_digit = 0
-
-    # ---------- BCD ----------
-    def set_bcd(self, number):
-        if number < 0 or number > 9:
-            raise ValueError("Chiffre doit être entre 0 et 9")
-
-        for i, pin in enumerate(self.bcd_pins):
-            pin.value((number >> i) & 1)
-
-    # ---------- Valeur ----------
-    def set_value(self, number):
-        if number < 0 or number > 99:
-            raise ValueError("Nombre doit être entre 0 et 99")
         self.value = number
 
-    # ---------- ON / OFF ----------
-    def on(self):
-        self.bi.value(1)
+    def _loop(self):
+        while self.running:
 
-    def off(self):
-        self.bi.value(0)
+            # -------- découpage nombre --------
+            tens = self.value // 10
+            units = self.value % 10
 
-    # ---------- Test segments ----------
-    def test_segments(self):
-        self.lt.value(0)  # Allume tous les segments
+            # -------- gestion < 10 --------
+            if self.value < 10:
+                tens = 0
 
-    def stop_test(self):
-        self.lt.value(1)
+            digits = [tens, units]
 
-    # ---------- Multiplexage ----------
-    def refresh(self):
-        if self.value < 10:
-            digits = [0, self.value]
-        else:
-            digits = [self.value // 10, self.value % 10]
+            # -------- éteindre les digits --------
+            self.digits[0].value(0)
+            self.digits[1].value(0)
 
-        # Désactiver tous les digits
-        for t in self.transistors:
-            t.value(0)
+            # -------- envoyer BCD --------
+            self._write_bcd(digits[self.active])
 
-        # Envoyer BCD
-        self.set_bcd(digits[self.current_digit])
+            # -------- activer digit --------
+            self.digits[self.active].value(1)
 
-        # Activer digit courant
-        self.transistors[self.current_digit].value(1)
+            # -------- switch digit --------
+            self.active = 1 - self.active
 
-        # Prochain digit
-        self.current_digit = (self.current_digit + 1) % 2
+            # petit délai multiplexage
+            time.sleep(0.002)
+
+    
+    def stop(self):
+        self.running = False
+
+        for d in self.digits:
+            d.value(0)
 
 
-# Test
 if __name__ == "__main__":
-    print("Decode CD4511 prêt.")
+    print("CD4511 prêt à l'utilisation")

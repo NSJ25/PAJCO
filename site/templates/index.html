@@ -43,19 +43,10 @@
             </section>
 
             <section>
-                <form id="openDoorForm" onsubmit="return false;">
-                    <fieldset>
-                        <legend>Ouverture de la barrière</legend>
-
-                        <label for="username">Nom d'utilisateur:</label>
-                        <input type="text" id="username" name="username" required />
-                        <br />
-                        <label for="password">Mot de passe:</label>
-                        <input type="password" id="password" name="password" required />
-                        <br />
-                        <button type="button" onclick="OpenDoor()"> Ouvrir la barrière </button>
-                    </fieldset>
-                </form>
+                
+                <button type="button" onclick="enter()"> Entrer dans le parking</button>
+                <button type="button" onclick="exit()"> Sortir du parking</button>
+                
             </section>
 
             <dialog id="dialog">

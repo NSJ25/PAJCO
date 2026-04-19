@@ -1,48 +1,59 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}" />
-        <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
-        <title>Interface admin</title>
-    </head>
-    <body onload="init()">
-        <header>
-            <h1>Admin</h1>
-            <p>Interface admin pour la gestion du parking</p>
-        </header>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/admin.css') }}"
+    />
+    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+    <title>Interface admin</title>
+  </head>
+  <body onload="init()">
+    <header>
+      <h1>Admin</h1>
+      <p>Interface admin pour la gestion du parking</p>
+      <a
+        id="secretHomeLink"
+        href="/"
+        class="hidden-secret-link"
+        aria-label="Retour vers l'accueil"
+      ></a>
+    </header>
 
-        <main>
-            <section>
-                <h2>Utilisateurs</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Nom</th>
-                            <th>Prenom</th>
-                            <th>Username</th>
-                            <th>Etat</th>
-                        </tr>
-                    </thead>
-                    <tbody id="listUsers">
-                        <!-- Utilisateurs seront chargés ici -->
-                    </tbody>
-                </table>
-            </section>
-            <section>
-                <button type="button" onclick="AddUser()"> Ajouter un utilisateur </button>
-                <button type="button" onclick="removeUser()"> Supprimer un utilisateur </button>
-            </section>
+    <main>
+      <section>
+        <h2>Utilisateurs</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Nom</th>
+              <th>Prenom</th>
+              <th>Username</th>
+              <th>Etat</th>
+            </tr>
+          </thead>
+          <tbody id="listUsers">
+            <!-- Utilisateurs seront chargés ici -->
+          </tbody>
+        </table>
+      </section>
+      <section class="actions">
+        <button type="button" onclick="AddUser()">
+          Ajouter un utilisateur
+        </button>
+        <button type="button" onclick="removeUser()">
+          Supprimer un utilisateur
+        </button>
+      </section>
 
-            <dialog id="dialog">
-                <h2 id="dialogTitle"> </h2>
-            <section id="dialogContent">
-            
-            </section>
-            <br>
-            <button type="button" onclick="fermerPopup('dialog')"> Fermer </button>
-            </dialog>
-        </main>
-    </body>
+      <dialog id="dialog">
+        <h2 id="dialogTitle"></h2>
+        <section id="dialogContent"></section>
+        <br />
+        <button type="button" onclick="fermerPopup('dialog')">Fermer</button>
+      </dialog>
+    </main>
+  </body>
 </html>

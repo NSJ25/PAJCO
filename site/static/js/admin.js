@@ -1,6 +1,6 @@
 // fonction d'initialisation
 function init() {
-    console.log("Bivenuevenue sur PAJCO !");
+    console.log("Bienvenue sur PAJCO !");
     loadUsers(); // Charger les utilisateurs au démarrage
 }
 

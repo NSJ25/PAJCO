@@ -1,6 +1,6 @@
 // fonction d'initialisation
 function init() {
-    console.log("Bivenuevenue sur PAJCO !");
+    console.log("Bienvenue sur PAJCO !");
 }
 
 // fonction pour récupérer un élément par son ID
@@ -65,13 +65,23 @@ function OpenDoor() {
     xhr.onload = function() {
         if (xhr.status === 200) {
             let response = JSON.parse(xhr.responseText);
+            console.log("openDoor response", response);
             let msg = getId("dialogMessage");
-            if (response.status === "access authorisé") {
-                msg.innerHTML = `Bienvenue a la maison : ${response.prenom} ${response.nom} !`;
+            if (response.status === "autorisé") {
+                let text = `Bienvenue à la maison : ${response.prenom} ${response.nom} !`;
+                if (response.pico_error) {
+                    text += ` (erreur Pico: ${response.pico_error})`;
+                }
+                msg.textContent = text;
+                afficherPopup("dialog");
             } else {
-                msg.innerHTML = "Nom d'utilisateur ou mot de passe incorrect.";
+                let text = response.reason || response.message || "Nom d'utilisateur ou mot de passe incorrect.";
+                msg.textContent = text;
+                afficherPopup("dialog");
+                setTimeout(() => {
+                    fermerPopup("dialog");
+                }, 3000);
             }
-            afficherPopup("dialog");
         } else {
             console.error("Erreur serveur : " + xhr.status);
         }
@@ -83,7 +93,7 @@ function exit() {
     afficherPopup("dialog");
     const msg = getId("dialogMessage");
     msg.innerHTML = `
-    <h2 class="title2"> A revoir et a bientôt ! </h2>
+    <h2 class="title2"> À revoir et à bientôt ! </h2>
     <P class="text"> Mettez vos informations de connexion pour sortir du parking.</p>
     <form id="closeDoorForm" onsubmit="return false;">
         <fieldset>
@@ -116,13 +126,23 @@ function CloseDoor(){
     );
     xhr.onload = function() {
         let response = JSON.parse(xhr.responseText);
+        console.log("closeDoor response", response);
         let msg = getId("dialogMessage");
-        if (response.status === "access authorisé") {
-            msg.innerHTML = `Au revoir et a bientôt ! ${response.prenom} ${response.nom} !`;
+        if (response.status === "autorisé") {
+            let text = `Au revoir et à bientôt ! ${response.prenom} ${response.nom} !`;
+            if (response.pico_error) {
+                text += ` (erreur Pico: ${response.pico_error})`;
+            }
+            msg.textContent = text;
+            afficherPopup("dialog");
         } else {
-            msg.innerHTML = "Nom d'utilisateur ou mot de passe incorrect.";
+            let text = response.reason || response.message || "Nom d'utilisateur ou mot de passe incorrect.";
+            msg.textContent = text;
+            afficherPopup("dialog");
+            setTimeout(() => {
+                fermerPopup("dialog");
+            }, 3000);
         }
-        afficherPopup("dialog");
     }       
 
 

@@ -1,10 +1,14 @@
 from flask import Flask, render_template, request, jsonify
 import sqlite3
 import hashlib
+import requests
+
+PICO_IP = "192.168.197.39"
 
 app = Flask(__name__)
 
 @app.route("/test", methods=["GET"])
+
 def test():
     return jsonify({"message": "OK depuis Flask"})
 
@@ -59,7 +63,7 @@ def open_door():
     connect = connect_db()
     db = connect.cursor()
 
-    # Vérifier login
+    # Vérifier login + mot de passe
     db.execute("""
         SELECT nom, prenom, username, etat
         FROM utilisateurs
@@ -67,8 +71,9 @@ def open_door():
     """, (username, password))
 
     user = db.fetchone()
+    print(f"openDoor request from {request.remote_addr} user={username}")
 
-    # Utilisateur inconnu
+    # Login incorrect
     if not user:
         connect.close()
         return jsonify({
@@ -84,7 +89,7 @@ def open_door():
             "reason": "déjà dans le parking"
         })
 
-    # Autorisé à entrer
+    # Update state before la commande Pico, puis corriger si la détection échoue.
     db.execute("""
         UPDATE utilisateurs
         SET etat = 1
@@ -92,12 +97,58 @@ def open_door():
     """, (username,))
 
     connect.commit()
-    connect.close()
 
-    return jsonify({
+    pico_error = None
+    pico_status = None
+    response_payload = {
         "status": "autorisé",
-        "message": "entrée acceptée"
-    })
+        "message": "entrée acceptée",
+        "nom": user["nom"],
+        "prenom": user["prenom"]
+    }
+
+    try:
+        print(f"Envoi de la commande /open au Pico {PICO_IP}")
+        pico_response = requests.get(f"http://{PICO_IP}/open", timeout=15)
+        pico_response.raise_for_status()
+        pico_data = pico_response.json()
+        pico_status = pico_data.get("status")
+        print("Réponse Pico open:", pico_data)
+
+        if pico_status == "timeout":
+            db.execute("UPDATE utilisateurs SET etat = 0 WHERE username=?", (username,))
+            connect.commit()
+            response_payload = {
+                "status": "refusé",
+                "reason": "aucune voiture détectée, entrée annulée",
+                "message": "entrée annulée",
+                "pico_status": pico_status
+            }
+            connect.close()
+            return jsonify(response_payload)
+        elif pico_status and pico_status != "ok":
+            response_payload["pico_status"] = pico_status
+
+    except Exception as e:
+        pico_error = str(e)
+        print("Erreur Pico:", e)
+        db.execute("UPDATE utilisateurs SET etat = 0 WHERE username=?", (username,))
+        connect.commit()
+        response_payload = {
+            "status": "refusé",
+            "reason": "commande Pico échouée",
+            "message": "entrée annulée",
+            "pico_error": pico_error
+        }
+        connect.close()
+        return jsonify(response_payload)
+
+    if pico_error:
+        response_payload["pico_error"] = pico_error
+        response_payload["message"] = "entrée acceptée (commande Pico échouée)"
+
+    connect.close()
+    return jsonify(response_payload)
       
 
 # Route pour fermer la porte
@@ -110,7 +161,7 @@ def close_door():
     connect = connect_db()
     db = connect.cursor()
 
-    # Vérifier utilisateur
+    # Vérifier login + mot de passe
     db.execute("""
         SELECT nom, prenom, username, etat
         FROM utilisateurs
@@ -118,8 +169,9 @@ def close_door():
     """, (username, password))
 
     user = db.fetchone()
+    print(f"closeDoor request from {request.remote_addr} user={username}")
 
-    # Utilisateur inexistant
+    # identifiants incorrects
     if not user:
         connect.close()
         return jsonify({
@@ -127,15 +179,15 @@ def close_door():
             "reason": "identifiants incorrects"
         })
 
-    # Pas dans le parking
+    # vérifier état (doit être 1 pour sortir)
     if user["etat"] == 0:
         connect.close()
         return jsonify({
             "status": "refusé",
-            "reason": "utilisateur pas dans le parking"
+            "reason": "utilisateur déjà à l'extérieur"
         })
 
-    # Mise à jour état (sortie du parking)
+    # mise à jour état (sortie du parking)
     db.execute("""
         UPDATE utilisateurs
         SET etat = 0
@@ -143,12 +195,59 @@ def close_door():
     """, (username,))
 
     connect.commit()
-    connect.close()
 
-    return jsonify({
+    pico_error = None
+    pico_status = None
+    response_payload = {
         "status": "autorisé",
-        "message": "sortie enregistrée"
-    })
+        "message": "sortie acceptée",
+        "nom": user["nom"],
+        "prenom": user["prenom"]
+    }
+
+    try:
+        print(f"Envoi de la commande /close au Pico {PICO_IP}")
+        pico_response = requests.get(f"http://{PICO_IP}/close", timeout=15)
+        pico_response.raise_for_status()
+        pico_data = pico_response.json()
+        pico_status = pico_data.get("status")
+        print("Réponse Pico close:", pico_data)
+
+        if pico_status == "timeout":
+            db.execute("UPDATE utilisateurs SET etat = 1 WHERE username=?", (username,))
+            connect.commit()
+            response_payload = {
+                "status": "refusé",
+                "reason": "aucune détection, sortie annulée",
+                "message": "sortie annulée",
+                "pico_status": pico_status
+            }
+            connect.close()
+            return jsonify(response_payload)
+        elif pico_status and pico_status != "ok":
+            response_payload["pico_status"] = pico_status
+
+    except Exception as e:
+        pico_error = str(e)
+        print("Erreur Pico:", e)
+        db.execute("UPDATE utilisateurs SET etat = 1 WHERE username=?", (username,))
+        connect.commit()
+        response_payload = {
+            "status": "refusé",
+            "reason": "commande Pico échouée",
+            "message": "sortie annulée",
+            "pico_error": pico_error
+        }
+        connect.close()
+        return jsonify(response_payload)
+
+    if pico_error:
+        response_payload["pico_error"] = pico_error
+        response_payload["message"] = "sortie acceptée (commande Pico échouée)"
+
+    connect.close()
+    return jsonify(response_payload)
+
        
 # Route pour charger les utilisateurs
 @app.route("/users", methods=["GET"])
@@ -228,7 +327,6 @@ def remove_user():
   
  
 
-app.run(host="0.0.0.0", port=5000, debug=True)
-
 if __name__ == "__main__":
-   print("Server is running on http://0.0.0.0:5000")
+    print("Server is running on http://0.0.0.0:5000")
+    app.run(host="0.0.0.0", port=5000, debug=True)

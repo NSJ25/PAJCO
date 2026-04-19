@@ -3,7 +3,9 @@ from CD4511 import CD4511
 from time import sleep
 import network
 import urequests
+import ujson as json
 import time
+import socket
 
 # SSID et mot de passe WiFi
 ssid = "Techno"
@@ -40,6 +42,12 @@ transistor_pins = [4, 5]
 # Afficheur 7 segments
 aff = CD4511(bcd_pins, transistor_pins)
 
+# Fonction pour initialiser le serveur HTTP
+addr = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
+s = socket.socket()
+s.bind(addr)
+s.listen(1)
+
 # Fonction pour se connecter au WiFi
 def wifi_connect(timeout=15):
     wlan = network.WLAN(network.STA_IF)
@@ -62,61 +70,101 @@ def wifi_connect(timeout=15):
         print("Impossible de se connecter au WiFi.")
         return False
 # appel
-wifi_connect()
+if not wifi_connect():
+    raise SystemExit("Impossible de connecter le WiFi")
+print("Serveur HTTP prêt sur 0.0.0.0:80")
 
 # Fonction pour gérer l'activation d'un capteur
-def capteur_active(capteur, servo):
+def capteur_active(capteur, servo, blue_led=False, use_buzzer=False):
     """
     Fonction pour gérer l'activation d'un capteur.
-    Si le capteur est actif (valeur 0), ferme la barriere.
-    Sinon, ouvre la barriere.
+    Attend 10 secondes et ferme la barrière si le capteur détecte un passage.
+    Si rien n'est détecté, on ferme la barrière et on renvoie un timeout.
     """
-    if capteur.value() == 0:
-        close_barrier(servo)
-        print("fermeture de la barriere")
-    
+    print("Activation du capteur : attente de détection pendant 10 secondes...")
+    deadline = time.time() + 10
+    triggered = False
 
-# Fonction pour ouvrir la barriere
-def open_barrier(servo):
+    if use_buzzer:
+        adc_value = pot.read_u16()
+        freq = 500 + int((adc_value / 65535) * 2000)  # 500-2500 Hz
+        buzzer.freq(freq)
+        buzzer.duty_u16(32767)
+        print(f"Buzzer activé à {freq} Hz pendant 5 secondes pendant l'attente de détection")
+        buzzer_deadline = time.time() + 5
+    else:
+        buzzer_deadline = None
+
+    while time.time() < deadline:
+        if capteur.value() == 0:
+            triggered = True
+            break
+
+        if blue_led:
+            led_blue.value(1)
+            sleep(0.1)
+            led_blue.value(0)
+            sleep(0.1)
+        else:
+            sleep(0.1)
+
+        if use_buzzer and time.time() >= buzzer_deadline:
+            buzzer.duty_u16(0)
+            use_buzzer = False
+
+    buzzer.duty_u16(0)
+    led_blue.value(0)
+
+    if triggered:
+        print("Capteur déclenché : fermeture de la barrière")
+        close_barrier(servo)
+        return {"status": "ok", "message": "détection effectuée"}
+    else:
+        print("Aucune détection pendant 10 secondes : fermeture de la barrière")
+        close_barrier(servo)
+        return {"status": "timeout", "message": "aucune voiture détectée"}
+
+# Fonction pour ouvrir la barrière
+def open_barrier(servo, use_buzzer=False):
     """
-    Fonction pour ouvrir la barriere.
-    Utilise le servo_enter pour ouvrir la barriere.
+    Fonction pour ouvrir la barrière.
+    Utilise le servo pour ouvrir la barrière à 180 degrés.
     """
-    duty = int(1638 + (180 / 180) * (8192 - 1638))
+    duty = 6553  # Environ 2ms pour 180°
+    print(f"Ouverture de la barrière sur servo {servo} duty={duty}")
     servo.duty_u16(duty)
 
-# Fonction pour fermer la barriere
+# Fonction pour fermer la barrière
 def close_barrier(servo):
     """
-    Fonction pour fermer la barriere.
-    Utilise le servo_exit pour fermer la barriere.
+    Fonction pour fermer la barrière.
+    Utilise le servo pour fermer la barrière à la position fermée.
     """
-    duty = int(1638 + (0 / 180) * (8192 - 1638))
+    duty = 2048  # Environ 0.625ms pour bien fermer
+    print(f"Fermeture de la barrière sur servo {servo} duty={duty}")
     servo.duty_u16(duty)
+    buzzer.duty_u16(0)
+    print("Buzzer désactivé")
 
 def update_led(places):
-
-    if places < 15:
-        # peu de place utilisées
-        led_green.value(1)
+    # places = nombre de places libres
+    if places == 0:
+        # Parking plein
+        led_green.value(0)
         led_orange.value(0)
-        led_red.value(0)
-        
-    elif places < 20:
-        # situation moyenne
+        led_red.value(1)
+    elif places <= 5:
+        # Peu de places restantes (utilisé >=15)
         led_green.value(0)
         led_orange.value(1)
         led_red.value(0)
-        
     else:
-        # 20 places libres (parking vide)
+        # Places disponibles
         led_green.value(1)
         led_orange.value(0)
         led_red.value(0)
 
-   
-
-FLASK_IP = "192.168.181.131"
+FLASK_IP = "192.168.197.131"
 
 def get_parking_status():
 
@@ -139,7 +187,44 @@ def get_parking_status():
         print("Erreur :", e)
         return None
 
-
 while True:
     free_places = get_parking_status()
+    print(f"Places libres: {free_places}")
+    
     time.sleep(5)
+    
+    print("En attente de connexion HTTP...")
+    cl, addr = s.accept()
+    request = cl.recv(1024)
+    try:
+        request = request.decode("utf-8")
+    except Exception:
+        request = str(request)
+
+    print("Requête reçue :", request)
+    print("Adresse cliente :", addr)
+
+    # SI FLASK ENVOIE /open
+    result = {"status": "error", "message": "commande HTTP non reconnue"}
+
+    if "GET /open" in request:
+        print("Commande OPEN reçue")
+        open_barrier(servo_enter)
+        result = capteur_active(capteur_enter, servo_enter, blue_led=True, use_buzzer=True)
+    elif "GET /close" in request:
+        print("Commande CLOSE reçue")
+        open_barrier(servo_exit)
+        result = capteur_active(capteur_exit, servo_exit, blue_led=False, use_buzzer=False)
+    else:
+        print("Commande HTTP non reconnue")
+
+    body = json.dumps(result)
+    response = (
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: application/json\r\n"
+        f"Content-Length: {len(body)}\r\n"
+        "Connection: close\r\n\r\n"
+        f"{body}"
+    )
+    cl.send(response)
+    cl.close()

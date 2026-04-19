@@ -1,17 +1,33 @@
 from flask import Flask, render_template, request, jsonify
-import paho.mqtt.publish as publish
 import sqlite3
 import hashlib
 
 app = Flask(__name__)
 
-# Fonction pour envoyer un message MQTT
-def send_mqtt(topic, message):
-    publish.single(
-        topic,
-        message,
-        hostname="broker.hivemq.com"  # IP du broker MQTT
-    )
+@app.route("/test", methods=["GET"])
+def test():
+    return jsonify({"message": "OK depuis Flask"})
+
+# Fonction pour obtenir le statut du parking
+@app.route("/parking/status", methods=["GET"])
+def parking_status():
+
+    connect = connect_db()
+    db = connect.cursor()
+
+    # compter voitures dans le parking
+    db.execute("SELECT COUNT(*) as count FROM utilisateurs WHERE etat = 1")
+    result = db.fetchone()
+
+    used = result["count"]
+    free = 20 - used
+
+    connect.close()
+
+    return jsonify({
+        "used": used,
+        "free": free
+    })
 
 # Fonction pour hacher le mot de passe
 def hash_password(password):
@@ -22,37 +38,6 @@ def connect_db():
     connect = sqlite3.connect("parking.db")
     connect.row_factory = sqlite3.Row
     return connect
-
-# Fonction pour mettre à jour le statut du parking
-def update_parking_status():
-
-    connect = connect_db()
-    db = connect.cursor()
-
-    db.execute("SELECT COUNT(*) as count FROM utilisateurs WHERE etat = 1")
-    result = db.fetchone()
-
-    used = result["count"]
-    free = 20 - used
-
-    connect.close()
-
-    # Envoyer au Pico
-    send_mqtt("PAJCO/parking/free", str(free))
-
-    return used, free
-
-# Fonction pour mettre à jour l'état des leds
-def parking_led_status(used):
-
-    if used <= 12:
-        send_mqtt("PAJCO/led", "green")
-
-    elif used < 20:
-        send_mqtt("PAJCO/led", "orange")
-
-    else:
-        send_mqtt("PAJCO/led", "red")
 
 # Route pour acceder a page d'accueil
 @app.route("/")
@@ -109,14 +94,6 @@ def open_door():
     connect.commit()
     connect.close()
 
-    # Mettre à jour le statut du parking
-    used, free = update_parking_status()
-    # Mettre à jour l'état des leds
-    parking_led_status(used)  
-
-    # MQTT → ouverture porte
-    send_mqtt("PAJCO/door", "open")
-
     return jsonify({
         "status": "autorisé",
         "message": "entrée acceptée"
@@ -167,14 +144,6 @@ def close_door():
 
     connect.commit()
     connect.close()
-
-    # Mettre à jour le statut du parking
-    used, free = update_parking_status()
-    # Mettre à jour l'état des leds
-    parking_led_status(used)  
-    
-    # MQTT → fermer barrière
-    send_mqtt("PAJCO/door", "close")
 
     return jsonify({
         "status": "autorisé",
@@ -257,7 +226,9 @@ def remove_user():
 
 
   
-    
+ 
+
+app.run(host="0.0.0.0", port=5000, debug=True)
 
 if __name__ == "__main__":
-    app.run(debug=True) 
+   print("Server is running on http://0.0.0.0:5000")

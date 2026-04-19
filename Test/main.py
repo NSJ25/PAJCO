@@ -1,8 +1,9 @@
 from machine import Pin, PWM, ADC
-from umqtt.simple import MQTTClient
 from CD4511 import CD4511
 from time import sleep
 import network
+import urequests
+import time
 
 # SSID et mot de passe WiFi
 ssid = "Techno"
@@ -93,3 +94,52 @@ def close_barrier(servo):
     duty = int(1638 + (0 / 180) * (8192 - 1638))
     servo.duty_u16(duty)
 
+def update_led(places):
+
+    if places < 15:
+        # peu de place utilisées
+        led_green.value(1)
+        led_orange.value(0)
+        led_red.value(0)
+        
+    elif places < 20:
+        # situation moyenne
+        led_green.value(0)
+        led_orange.value(1)
+        led_red.value(0)
+        
+    else:
+        # 20 places libres (parking vide)
+        led_green.value(1)
+        led_orange.value(0)
+        led_red.value(0)
+
+   
+
+FLASK_IP = "192.168.181.131"
+
+def get_parking_status():
+
+    url = f"http://{FLASK_IP}:5000/parking/status"
+
+    try:
+        response = urequests.get(url)
+        data = response.json()
+
+        used = data["used"]
+        free = data["free"]
+    
+        aff.show(free)
+        update_led(free)
+        response.close()
+
+        return free
+
+    except Exception as e:
+        print("Erreur :", e)
+        return None
+
+
+while True:
+    free_places = get_parking_status()
+    time.sleep(5)

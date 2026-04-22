@@ -7,8 +7,8 @@ import time
 # ==========================
 # WIFI
 # ==========================
-ssid = "Toumi❤️"
-password = "toumi123"
+ssid = "Galaxy A25 5G F91E"
+password = "ehef36fi6auwwq6"
 
 wlan = network.WLAN(network.STA_IF)
 wlan.active(True)
@@ -57,8 +57,8 @@ def beep(duration=0.3, freq=1500, volume=40000):
 # ==========================
 # CAPTEURS IR
 # ==========================
-capteur_entree = Pin(4, Pin.IN)
-capteur_sortie = Pin(5, Pin.IN)  # nouveau capteur pour la sortie
+capteur_entree = Pin(16, Pin.IN)
+capteur_sortie = Pin(17, Pin.IN)  # nouveau capteur pour la sortie
 
 # ==========================
 # FONCTION CYCLE BARRIERE

@@ -7,9 +7,11 @@ import ujson as json
 import time
 import socket
 
+FLASK_IP = "172.20.136.201"
+
 # SSID et mot de passe WiFi
-ssid = "Techno"
-passwd = "jeremie25"
+ssid = "Galaxy A25 5G F91E"
+passwd = "ehef36fi6auwwq6"
 
 # Pins pour les leds
 led_red = Pin(0, Pin.OUT)
@@ -163,8 +165,6 @@ def update_led(places):
         led_green.value(1)
         led_orange.value(0)
         led_red.value(0)
-
-FLASK_IP = "192.168.197.131"
 
 def get_parking_status():
 

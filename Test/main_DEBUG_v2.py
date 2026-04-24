@@ -63,18 +63,16 @@ s.setblocking(False)
 
 def send_json_response(client, result):
     """Envoie une réponse JSON HTTP au client"""
-    body = json.dumps(result)  # Utilise json (qui est ujson)
+    body = json.dumps(result)
     
-    # Construire la réponse HTTP (encoder en bytes)
     response_str = (
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: application/json\r\n"
-        f"Content-Length: {len(body.encode('utf-8'))}\r\n"  # Longueur en bytes
+        f"Content-Length: {len(body.encode('utf-8'))}\r\n"
         "Connection: close\r\n\r\n"
         f"{body}"
     )
     
-    # Envoyer en bytes
     client.send(response_str.encode('utf-8'))
     client.close()
 
@@ -82,7 +80,7 @@ def send_json_response(client, result):
 def wifi_connect(timeout=15):
     wlan = network.WLAN(network.STA_IF)
     if wlan.isconnected():
-        return True  # Déjà connecté
+        return True
     wlan.active(True)
     wlan.connect(ssid, passwd)
     print("Connexion au WiFi...")
@@ -115,110 +113,80 @@ if not wifi_connect():
 print("Serveur HTTP prêt sur 0.0.0.0:80")
 
 # ====================================================================
-# CONFIGURATION SERVOS CORRIGÉE
+# CONFIGURATION SERVOS
 # ====================================================================
 
-# Valeurs duty pour les servos (50 Hz)
 SERVO_CLOSED = 2458
-#0120 1ms → 0° (barrière FERMÉE, baissée)
-SERVO_OPEN = 6553   # 1.5ms → 90° (barrière OUVERTE, levée)
+SERVO_OPEN = 6553
 
-# Plus besoin de SERVO_NEUTRAL !
-
-# Configuration des timeouts
-CAPTEUR_TIMEOUT = 15  # Temps d'attente max pour détection (secondes)
-PASSAGE_DELAY = 3     # Temps d'attente après détection (secondes)
+CAPTEUR_TIMEOUT = 15
+PASSAGE_TIMEOUT = 8
 
 # ====================================================================
-# FONCTIONS SERVOS CORRIGÉES
+# FONCTIONS SERVOS
 # ====================================================================
 
 def open_barrier(servo, use_buzzer=False):
-    """
-    Ouvre la barrière (servo à 90°)
-    
-    Args:
-        servo: Objet PWM du servo
-        use_buzzer: Si True, active le buzzer
-    """
     print(f">>> OUVERTURE barrière (duty={SERVO_OPEN} = 90°)")
     servo.duty_u16(SERVO_OPEN)
-    
-    # Laisser le temps au servo de bouger
     sleep(1.0)
     print("    ✓ Barrière ouverte à 90°")
     
-    # Buzzer si demandé
     if use_buzzer:
         activate_buzzer(freq=2000, duration=1.5)
 
 def close_barrier(servo):
-    """
-    Ferme la barrière (servo à 0°)
-    ET LA LAISSE FERMÉE !
-    
-    Args:
-        servo: Objet PWM du servo
-    """
     print(f">>> FERMETURE barrière (duty={SERVO_CLOSED} = 0°)")
     servo.duty_u16(SERVO_CLOSED)
-    
-    # Laisser le temps au servo de bouger
     sleep(1.0)
     print("    ✓ Barrière fermée à 0°")
-    
-    # ✅ ON NE REVIENT PAS EN POSITION NEUTRE !
-    # La barrière RESTE fermée
 
-# CORRECTION BUZZER : Durées augmentées
-def activate_buzzer(freq=1000, duration=1.5):  # AUGMENTÉ : 1.5s par défaut
-    """
-    CORRECTION: Buzzer plus long et plus fort
-    """
+def activate_buzzer(freq=1000, duration=1.5):
     adc_value = pot.read_u16()
     adjusted_freq = freq + int((adc_value / 65535) * 1500)
     buzzer.freq(adjusted_freq)
-    buzzer.duty_u16(50000)  # AUGMENTÉ : 76% au lieu de 70%
+    buzzer.duty_u16(50000)
     print(f"🔊 Buzzer: {adjusted_freq} Hz pendant {duration}s")
     sleep(duration)
     buzzer.duty_u16(0)
 
-def capteur_active(capteur, servo, blue_led=False, use_buzzer=False):
+def detect_vehicle_and_wait_passage(capteur, servo, blue_led=False, use_buzzer=False):
     """
-    AMÉLIORÉ: Plus de debug + augmentation du délai de passage
+    CORRIGÉ: Attend que la voiture soit PASSÉE (retour à l'état initial)
     """
-    TIMEOUT = 12  # Timeout pour attendre la détection
-    PASSAGE_DELAY = 5  # Délai pour laisser passer complètement la voiture
+    DETECTION_TIMEOUT = 12
+    PASSAGE_TIMEOUT = 8
     
     print(f"\n{'='*50}")
-    print(f"ATTENTE DÉTECTION CAPTEUR ({TIMEOUT}s)")
+    print(f"ATTENTE DÉTECTION CAPTEUR ({DETECTION_TIMEOUT}s)")
     print(f"{'='*50}")
     
-    # État initial du capteur
-    initial_state = capteur.value()
-    print(f"État initial capteur: {initial_state} (0=objet près, 1=libre)")
-    print(f"DEBUG: Vérifiez que le capteur change d'état quand une voiture passe")
+    # État initial du capteur (devrait être 1 = libre)
+    initial_state =capteur.value()
+    print(f"État initial: {initial_state} (0=objet près, 1=libre)")
+    print(f"→ Attend que le capteurs revienne a {initial_state}")
     
-    deadline = time.time() + TIMEOUT
-    triggered = False
+    detection_deadline = time.time() + DETECTION_TIMEOUT
+    detected = False
+    passed = False
     check_count = 0
     
     if use_buzzer:
-        activate_buzzer(freq=1500, duration=1.0)  # AUGMENTÉ : 1s au lieu de 0.3s
+        activate_buzzer(freq=1500, duration=1.0)
     
-    while time.time() < deadline:
+    # Phase 1: Attendre que le capteurs detecte quelque chose (passage a 0)
+    print("Phase 1: En attente d'une voiture...")
+    while time.time() < detection_deadline and not detected:
         check_count += 1
-        current_value = capteur.value()
+        current_value =capteur.value()
         
-        # DEBUG: Afficher toutes les 2 secondes
         if check_count % 20 == 0:
-            remaining = int(deadline - time.time())
-            print(f"  [{remaining}s restantes] Capteur={current_value}")
+            remaining = int(detection_deadline - time.time())
+            print(f"  [{remaining}s] Capteur={current_value}")
         
-        if current_value == 0:  # Capteur déclenché (0 = détection)
-            triggered = True
-            print(f"✅ CAPTEUR DÉCLENCHÉ ! (après {check_count * 0.1:.1f}s)")
-            print(f"   Changement d'état détecté: {initial_state} → {current_value}")
+        if current_value == 0:
+            detected = True
+            print(f"VOITURE DETECTEE ! (apres {check_count * 0.1:.1f}s)")
             break
         
         if blue_led:
@@ -231,29 +199,45 @@ def capteur_active(capteur, servo, blue_led=False, use_buzzer=False):
     
     led_blue.value(0)
     
-    if triggered:
-        print("✅ Détection réussie")
-        PASSAGE_DELAY = 5
-        print(f"Attente passage complet ({PASSAGE_DELAY}s)...")
-        # Garder le servo ouvert pendant le passage
-        for i in range(PASSAGE_DELAY * 10):
-            if i % 10 == 0:
-                print(f"  [{PASSAGE_DELAY - i//10}s] Barrière ouverte...")
-            sleep(0.1)
+    if not detected:
+        print(f"TIMEOUT apres {DETECTION_TIMEOUT}s - Aucune detection !")
+        print(f"   DIAGNOSTIC:")
+        print(f"   - Capteur alimente ? (etat initial = {initial_state})")
+        print(f"   - Portee de detection OK ? (essayez de rapprocher la main)")
+        print(f"   - Voiture assez proche ? (au moins 10-20cm)")
+        print(f"   -Etat du capteurs ACTUEL: {capteur.value()}")
         close_barrier(servo)
-        print("Barrière fermée")
-        return {"status": "ok", "message": "détection effectuée"}
+        activate_buzzer(freq=500, duration=2.0)
+        return {"status": "timeout", "message": "aucune voiture detectee - verifiez le capteurs"}
+    
+    # Phase 2: Attendre que la voiture soit PASSEE (retour a l'etat initial)
+    print(f"Phase 2: Attente passage complet (timeout={PASSAGE_TIMEOUT}s)...")
+    passage_deadline = time.time() + PASSAGE_TIMEOUT
+    
+    while time.time() < passage_deadline and not passed:
+        current_value =capteur.value()
+        
+        if current_value == initial_state:
+            passed = True
+            print(f"VOITURE PASSEE ! (capteur revenu a {current_value})")
+            break
+        
+        remaining = int(passage_deadline - time.time())
+        if int(time.time()) % 2 == 0:
+            print(f"  [Attente passage] Capteur={current_value}, {remaining}s restantes")
+        
+        sleep(0.2)
+    
+    if not passed:
+        print(f"Voiture detectee mais pas completement passee apres {PASSAGE_TIMEOUT}s")
+        print("   Fermeture de la barreire avec delai supplementaire...")
+        sleep(2.0)
     else:
-        print(f"❌ TIMEOUT après {TIMEOUT}s - Aucune détection !")
-        print(f"   🔍 DIAGNOSTIC:")
-        print(f"   - Capteur alimenté ? (état initial = {initial_state})")
-        print(f"   - Portée de détection OK ? (essayez de rapprocher la main)")
-        print(f"   - Voiture assez proche ? (au moins 10-20cm du capteur)")
-        print(f"   - État du capteur ACTUEL: {capteur.value()}")
-        print(f"   💡 CONSEIL: Testez le capteur isolément avec capteur_test.py")
-        close_barrier(servo)
-        activate_buzzer(freq=500, duration=2.0)  # Alerte plus longue
-        return {"status": "timeout", "message": "aucune voiture détectée - vérifiez le capteur"}
+        sleep(0.5)
+    
+    close_barrier(servo)
+    print("Barriere fermee")
+    return {"status": "ok", "message": "detection effectuee"}
 
 def update_led(places):
     if places == 0:
@@ -290,10 +274,10 @@ def get_parking_status():
         consecutive_errors += 1
         
         if consecutive_errors <= MAX_ERRORS_BEFORE_PAUSE:
-            print(f"⚠️ Erreur Flask (tentative {consecutive_errors}): {e}")
+            print(f"Erreur Flask (tentative {consecutive_errors}): {e}")
         elif consecutive_errors == MAX_ERRORS_BEFORE_PAUSE + 1:
-            print(f"❌ Flask injoignable après {MAX_ERRORS_BEFORE_PAUSE} tentatives")
-            print("→ Mode dégradé activé")
+            print(f"Flask injoignable apres {MAX_ERRORS_BEFORE_PAUSE} tentatives")
+            print("Mode degrade active")
         
         return None
 
@@ -302,9 +286,8 @@ def update_parking_display():
     
     current_time = time.time()
     
-    # Vérifier WiFi avant mise à jour
     if not check_wifi_reconnect():
-        print("❌ WiFi indisponible - Mise à jour annulée")
+        print("WiFi indisponible - Mise a jour annulee")
         return
     
     if current_time - last_update_time >= UPDATE_INTERVAL:
@@ -317,9 +300,8 @@ def update_parking_display():
             free = get_parking_status()
             
             if free is not None:
-                # Détecter les changements
                 if current_free_places != free:
-                    print(f"📊 Places libres: {current_free_places} → {free}")
+                    print(f"Places libres: {current_free_places} -> {free}")
                 current_free_places = free
                 aff.show(free)
                 update_led(free)
@@ -335,7 +317,7 @@ def update_parking_display():
 
 # Initialisation
 print("\n" + "=" * 50)
-print("INITIALISATION DU SYSTÈME PARKING")
+print("INITIALISATION DU SYSTEME PARKING")
 print("=" * 50)
 aff.show(current_free_places)
 update_led(current_free_places)
@@ -346,16 +328,16 @@ print("=" * 50 + "\n")
 print("\n" + "="*50)
 print("TEST INITIAL DES CAPTEURS")
 print("="*50)
-print(f"  Capteur ENTRÉE (GPIO 21): {capteur_enter.value()}")
+print(f"  Capteur ENTREE (GPIO 21): {capteur_enter.value()}")
 print(f"  Capteur SORTIE (GPIO 20): {capteur_exit.value()}")
-print("  (0=objet détecté/proche, 1=libre/loin)")
-print("💡 ASTUCE: Passez votre main à 5-10cm du capteur pour tester")
+print("  (0=objet detecte/proche, 1=libre/loin)")
+print("ASTUCE: Passez votre main a 5-10cm du capteurs pour tester")
 print("="*50)
 print()
 
 # Boucle principale
-print("🚀 Serveur HTTP actif")
-print("En attente de requêtes /open ou /close...\n")
+print("Serveur HTTP actif")
+print("En attente de requetes /open ou /close...\n")
 
 while True:
     try:
@@ -372,44 +354,42 @@ while True:
             except:
                 request = str(request)
             
-            print("\n" + "🔔" * 25)
-            print(f"📥 Requête HTTP de {addr}")
+            print("\n" + "REQUETE HTTP de " + str(addr))
             
             result = {"status": "error", "message": "commande non reconnue"}
             
             if "GET /open" in request:
-                print("🚗 COMMANDE: ENTRÉE VÉHICULE")
+                print("COMMANDE: ENTREE VEHICULE")
                 print("-" * 50)
-                print(f"État capteur AVANT ouverture: {capteur_enter.value()}")
+                print(f"Etat capteurs AVANT ouverture: {capteur_enter.value()}")
                 open_barrier(servo_enter, use_buzzer=True)
-                sleep(0.5)  # Laisser temps au servo de s'ouvrir
-                result = capteur_active(capteur_enter, servo_enter, blue_led=True, use_buzzer=True)
-                update_parking_display()  # Forcer mise à jour immédiate
-                print(f"Résultat: {result['status']} - Message: {result['message']}")
+                sleep(0.5)
+                result = detect_vehicle_and_wait_passage(capteur_enter, servo_enter, blue_led=True, use_buzzer=True)
+                update_parking_display()
+                print(f"Resultat: {result['status']} - Message: {result['message']}")
                 
             elif "GET /close" in request:
-                print("🚗 COMMANDE: SORTIE VÉHICULE")
+                print("COMMANDE: SORTIE VEHICULE")
                 print("-" * 50)
-                print(f"État capteur AVANT ouverture: {capteur_exit.value()}")
+                print(f"Etat capteurs AVANT ouverture: {capteur_exit.value()}")
                 open_barrier(servo_exit, use_buzzer=False)
-                sleep(0.5)  # Laisser temps au servo de s'ouvrir
-                result = capteur_active(capteur_exit, servo_exit, blue_led=False, use_buzzer=False)
-                update_parking_display()  # Forcer mise à jour immédiate
-                print(f"Résultat: {result['status']} - Message: {result['message']}")
+                sleep(0.5)
+                result = detect_vehicle_and_wait_passage(capteur_exit, servo_exit, blue_led=False, use_buzzer=False)
+                update_parking_display()
+                print(f"Resultat: {result['status']} - Message: {result['message']}")
                 
             elif "GET /status" in request:
-                print("📊 COMMANDE: DEMANDE STATUT")
+                print("COMMANDE: DEMANDE STATUT")
                 result = {
                     "status": "ok",
                     "free_places": current_free_places,
                     "flask_reachable": consecutive_errors == 0
                 }
             else:
-                print("❌ Commande inconnue")
+                print("Commande inconnue")
             
-            # Envoyer la réponse JSON
             send_json_response(cl, result)
-            print("🔔" * 25 + "\n")
+            print("\n")
             
         except OSError:
             pass
@@ -417,10 +397,10 @@ while True:
         sleep(0.1)
         
     except KeyboardInterrupt:
-        print("\n\n🛑 Arrêt du serveur...")
+        print("\n\nArret du serveur...")
         break
     except Exception as e:
-        print(f"❌ Erreur: {e}")
+        print(f"Erreur: {e}")
         sleep(0.5)
 
-print("Serveur arrêté")
+print("Serveur arrete")

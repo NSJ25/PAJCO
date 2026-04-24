@@ -1,7 +1,7 @@
 from machine import Pin, PWM
 import time
 
-servo = PWM(Pin(22))
+servo = PWM(Pin(26))
 servo.freq(50)
 
 def set_angle(angle):
